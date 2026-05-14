@@ -7,6 +7,6 @@
     <Project Path="src/OrderManagement.WebAPI/OrderManagement.WebAPI.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/OrderManagement.Tests/OrderManagement.Tests.csproj" />
+    <Project Path="tests/MyMcpServer/MyMcpServer.csproj" Id="1d449130-70b4-41ff-abaa-84d56b0093ba" />
   </Folder>
 </Solution>
