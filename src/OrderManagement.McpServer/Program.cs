@@ -1,13 +1,15 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using OrderManagement.Application;
+using OrderManagement.Application.Common.Interfaces;
+using OrderManagement.Application.Contracts;
 using OrderManagement.Infrastructure;
+using OrderManagement.McpServer.Services;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 // Tắt console logger mặc định
-builder.Logging.ClearProviders();
+//builder.Logging.ClearProviders();
 
 // ✅ Tái sử dụng DI từ Web API — không viết lại
 builder.Services.AddApplicationServices();
@@ -17,9 +19,14 @@ builder.Services.AddInfrastructureServices(builder.Configuration, builder.Enviro
 // ✅ Đăng ký MCP Server với stdio transport
 builder.Services
     .AddMcpServer()
-    .WithStdioServerTransport()   // stdio: dùng console in/out
+    .WithHttpTransport()
+    ///.WithStdioServerTransport()   // stdio: dùng console in/out
     .WithToolsFromAssembly();     // scan tất cả [McpServerTool] trong assembly
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICorrelationIdService, CorrelationIdService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 var app = builder.Build();
+app.MapMcp("/mcp"); // MCP server sẽ lắng nghe tại endpoint /mcp
 await app.RunAsync();
