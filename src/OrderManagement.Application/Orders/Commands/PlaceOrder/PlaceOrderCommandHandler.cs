@@ -69,12 +69,12 @@ namespace OrderManagement.Application.Orders.Commands.PlaceOrder
             var orderResult = Order.CreateDraft(userId.Value, address);
 
             // 2. Charge qua Payment Gateway
-            var paymentResult = await _paymentGateway.ChargeAsync(
-                new PaymentRequest(orderResult.Value.Id, orderResult.Value.TotalAmount.Amount, "VND",
-                                   string.Empty), cancellationToken);
+            //var paymentResult = await _paymentGateway.ChargeAsync(
+            //    new PaymentRequest(orderResult.Value.Id, orderResult.Value.TotalAmount.Amount, "VND",
+            //                       string.Empty), cancellationToken);
 
-            if (!paymentResult.IsSuccess)
-                return Result<Guid>.Failure(Error.Create("CARD_DECLINED", "Payment failed"));
+            //if (!paymentResult.IsSuccess)
+            //    return Result<Guid>.Failure(Error.Create("CARD_DECLINED", "Payment failed"));
 
 
             if (orderResult.IsFailure)
@@ -93,9 +93,9 @@ namespace OrderManagement.Application.Orders.Commands.PlaceOrder
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             // 4. Gửi email xác nhận
-            await _emailService.SendOrderConfirmationAsync(
-                customer.Email,customer.GetFullName(),
-                order.Id, order.TotalAmount.Amount, cancellationToken);
+            //await _emailService.SendOrderConfirmationAsync(
+            //    customer.Email,customer.GetFullName(),
+            //    order.Id, order.TotalAmount.Amount, cancellationToken);
 
 
             // Step 4: Return success với data

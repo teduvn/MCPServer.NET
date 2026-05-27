@@ -4,6 +4,7 @@ using OrderManagement.Application;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Infrastructure;
+using OrderManagement.McpServer.Middlewares;
 using OrderManagement.McpServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,8 +26,12 @@ builder.Services
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICorrelationIdService, CorrelationIdService>();
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<ICurrentUserService, FakeCurrentUserService>();
 
 var app = builder.Build();
+// Middleware phải đăng ký TRƯỚC MapMcp()
+app.UseMiddleware<McpErrorHandlingMiddleware>();
+
+
 app.MapMcp("/mcp"); // MCP server sẽ lắng nghe tại endpoint /mcp
 await app.RunAsync();
