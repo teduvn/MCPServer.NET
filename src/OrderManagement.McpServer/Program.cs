@@ -5,6 +5,7 @@ using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Infrastructure;
 using OrderManagement.McpServer.Middlewares;
+using OrderManagement.McpServer.Resources;
 using OrderManagement.McpServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,6 +22,9 @@ builder.Services.AddInfrastructureServices(builder.Configuration, builder.Enviro
 builder.Services
     .AddMcpServer()
     .WithHttpTransport()
+    .WithResources<OrderResource>()
+    .WithResources<SystemInfoResource>()
+    //.WithResourcesFromAssembly()   // scan tất cả [McpServerResource] trong assembly
     ///.WithStdioServerTransport()   // stdio: dùng console in/out
     .WithToolsFromAssembly();     // scan tất cả [McpServerTool] trong assembly
 

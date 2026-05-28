@@ -1,0 +1,123 @@
+﻿using MediatR;
+using ModelContextProtocol.Server;
+using OrderManagement.Application.Orders.Queries;
+using OrderManagement.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Text.Json;
+
+namespace OrderManagement.McpServer.Resources
+{
+    public class OrderResource
+    {
+        private readonly IMediator _mediator;
+
+
+        // Constructor injection — SDK tự inject qua DI
+        public OrderResource(IMediator mediator)
+        {
+            _mediator = mediator;
+        }
+
+
+        // --- Single order resource ---
+        [McpServerResource(
+            UriTemplate = "oms://orders/{orderId}",
+            Name = "Order Detail",
+            Title = "Chi tiết đầy đủ của một order: thông tin cơ bản, danh sách items, " +
+                          "lịch sử trạng thái. Dùng resource này thay vì tool get_order khi " +
+                          "bạn chỉ cần đọc thông tin mà không có action kèm theo.",
+            MimeType = "application/json"
+        )]
+        public async Task<string> GetOrder(Guid orderId)
+        {
+            // Tái sử dụng Query đã có trong Application Layer
+            var query = new GetOrderByIdQuery(orderId);
+            var order = await _mediator.Send(query);
+
+
+            if (order is null)
+            {
+                // Trả JSON với error — không throw exception
+                // AI cần đọc được error message để xử lý tiếp
+                return JsonSerializer.Serialize(new
+                {
+                    error = "NOT_FOUND",
+                    message = $"Order với ID '{orderId}' không tồn tại trong hệ thống.",
+                    suggestion = "Dùng resource oms://orders/list để xem danh sách order hợp lệ"
+                });
+            }
+
+
+            return JsonSerializer.Serialize(order, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+        }
+
+
+        [McpServerResource(
+            UriTemplate = "oms://orders/list",
+            Name = "Orders List",
+            Title = "Danh sách orders với filter và pagination. " +
+                          "Parameters: status (filter theo trạng thái), " +
+                          "page (trang hiện tại, mặc định 1), " +
+                          "pageSize (số records mỗi trang, mặc định 20, tối đa 100). " +
+                          "Trả về totalCount để biết tổng số orders.",
+            MimeType = "application/json"
+        )]
+        public async Task<string> ListOrders(
+            OrderStatus? status = null,   // Filter theo status, null = lấy tất cả
+            int page = 1,            // Trang hiện tại
+            int pageSize = 20)       // Số records mỗi trang
+        {
+            // Validate pagination params
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 100);  // Tối đa 100, tránh AI spam
+
+            var query = new GetOrdersPagedQuery(page, pageSize, status);
+
+            var result = await _mediator.Send(query);
+
+            if (result.IsFailure)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    error = "ERROR",
+                    message = result.Error.Description,
+                    code = result.Error.Code
+                });
+            }
+
+            var pagedResult = result.Value;
+
+            // Trả về metadata pagination cùng với data
+            // AI cần biết totalCount để tự quyết định có cần đọc thêm trang không
+            var response = new
+            {
+                data = pagedResult.Items,
+                pagination = new
+                {
+                    currentPage = pagedResult.Page,
+                    pageSize = pagedResult.PageSize,
+                    totalCount = pagedResult.TotalCount,
+                    totalPages = pagedResult.TotalPages,
+                    hasNextPage = pagedResult.HasNextPage,
+                    hasPreviousPage = pagedResult.HasPreviousPage
+                },
+                filter = new { status = status?.ToString() ?? "all" }
+            };
+
+
+            return JsonSerializer.Serialize(response, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+        }
+
+    }
+
+}
