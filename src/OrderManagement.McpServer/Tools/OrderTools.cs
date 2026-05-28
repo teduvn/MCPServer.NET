@@ -4,6 +4,8 @@ using OrderManagement.Application.Common.Exceptions;
 using OrderManagement.Application.Orders.Commands.PlaceOrder;
 using OrderManagement.Application.Orders.DTOs;
 using OrderManagement.Application.Orders.Queries;
+using OrderManagement.Domain.Common;
+using OrderManagement.Domain.Entities;
 using OrderManagement.Domain.Orders;
 using OrderManagement.McpServer.Models;
 using System.ComponentModel;
@@ -34,6 +36,47 @@ namespace OrderManagement.McpServer.OrderTools
             Guid orderId)
         {
             var query = new GetOrderByIdQuery(orderId);
+            var result = await _mediator.Send(query);
+            if (result.IsFailure)
+            {
+                return null;
+            }
+            return result.Value!;
+        }
+
+        [McpServerTool(Name = "get_orders")]
+        [Description(
+           "Retrieve a paginated list of orders with optional status filtering. " +
+           "Returns order summaries including order number, customer, total, status, and item count. " +
+           "Use this to browse orders with pagination support. " +
+           "For a single order's full details, use get_order instead.")]
+        public async Task<PagedResult<OrderSummaryDto>?> GetOrders(
+           [Description("Page number to retrieve (1-based). Default is 1.")]
+            int page = 1,
+           [Description("Number of items per page. Default is 10, maximum is 100.")]
+            int pageSize = 10,
+           [Description("Optional order status filter. Valid values: Draft, Placed, Confirmed, Shipped, Delivered, Cancelled. Leave empty to get all statuses.")]
+            string? status = null)
+        {
+            // Validate pagination parameters
+            if (page < 1)
+                page = 1;
+            if (pageSize < 1)
+                pageSize = 10;
+            if (pageSize > 100)
+                pageSize = 100;
+
+            // Parse status if provided
+            OrderStatus? orderStatus = null;
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                if (Enum.TryParse<OrderStatus>(status, ignoreCase: true, out var parsedStatus))
+                {
+                    orderStatus = parsedStatus;
+                }
+            }
+
+            var query = new GetOrdersPagedQuery(page, pageSize, orderStatus);
             var result = await _mediator.Send(query);
             if (result.IsFailure)
             {

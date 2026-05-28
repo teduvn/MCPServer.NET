@@ -24,7 +24,8 @@ builder.Services
     .WithHttpTransport()
     .WithResources<OrderResource>()
     .WithResources<SystemInfoResource>()
-    //.WithResourcesFromAssembly()   // scan tất cả [McpServerResource] trong assembly
+    .WithPromptsFromAssembly()    // scan tất cả [McpServerPrompt] trong assembly
+                                  //.WithResourcesFromAssembly()   // scan tất cả [McpServerResource] trong assembly
     ///.WithStdioServerTransport()   // stdio: dùng console in/out
     .WithToolsFromAssembly();     // scan tất cả [McpServerTool] trong assembly
 
