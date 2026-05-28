@@ -12,7 +12,7 @@ using OrderManagement.McpServer.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Tắt console logger mặc định
-builder.Logging.ClearProviders();
+//builder.Logging.ClearProviders();
 
 // ✅ Tái sử dụng DI từ Web API — không viết lại
 builder.Services.AddApplicationServices();
@@ -26,7 +26,7 @@ builder.Services
     .WithResources<SystemInfoResource>()
     .WithPromptsFromAssembly()    // scan tất cả [McpServerPrompt] trong assembly
                                   //.WithResourcesFromAssembly()   // scan tất cả [McpServerResource] trong assembly
-    .WithStdioServerTransport()   // stdio: dùng console in/out
+    //.WithStdioServerTransport()   // stdio: dùng console in/out
     .WithToolsFromAssembly();     // scan tất cả [McpServerTool] trong assembly
 
 builder.Services.AddHttpContextAccessor();

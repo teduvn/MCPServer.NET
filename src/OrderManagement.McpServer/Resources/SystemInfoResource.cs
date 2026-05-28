@@ -11,7 +11,7 @@ namespace OrderManagement.McpServer.Resources
         [McpServerResource(
             UriTemplate = "oms://system/info",
             Name = "OMS System Information",
-            Title = "Metadata của hệ thống OMS: version, cấu hình, trạng thái orders có thể có. " +
+            Title = "Metadata của hệ thống OMS: version, cấu hình, trạng thái orders theo domain model. " +
                           "Đọc resource này trước khi thực hiện bất kỳ action nào liên quan đến orders.",
             MimeType = "application/json"
         )]
@@ -27,20 +27,23 @@ namespace OrderManagement.McpServer.Resources
                 },
                 orderStatuses = new[]
                 {
-                    new { code = "Pending",    label = "Chờ xác nhận",
-                          description = "Order vừa được tạo, chưa được xử lý" },
-                    new { code = "Processing", label = "Đang xử lý",
-                          description = "Order đã được xác nhận, đang chuẩn bị hàng" },
+                    new { code = "Draft",      label = "Bản nháp",
+                          description = "Order mới tạo hoặc đang chỉnh sửa, chưa được đặt chính thức" },
+                    new { code = "Placed",     label = "Đã đặt",
+                          description = "Order đã được đặt từ trạng thái Draft" },
+                    new { code = "Confirmed",  label = "Đã xác nhận",
+                          description = "Order đã được xác nhận và có thể chuyển sang giao vận" },
                     new { code = "Shipped",    label = "Đã giao vận",
                           description = "Hàng đã bàn giao cho đơn vị vận chuyển" },
-                    new { code = "Completed",  label = "Hoàn thành",
+                    new { code = "Delivered",  label = "Đã giao thành công",
                           description = "Order đã được giao thành công" },
                     new { code = "Cancelled",  label = "Đã hủy",
                           description = "Order đã bị hủy, không thể khôi phục" }
                 },
                 businessRules = new
                 {
-                    canCancelStatuses = new[] { "Pending", "Processing" },
+                    canCancelStatuses = new[] { "Draft", "Placed", "Confirmed" },
+                    nonModifiableStatuses = new[] { "Shipped", "Cancelled" },
                     maxItemsPerOrder = 50,
                     currency = "VND"
                 }

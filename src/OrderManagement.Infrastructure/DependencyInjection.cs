@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Domain.Interfaces;
@@ -65,9 +67,15 @@ namespace OrderManagement.Infrastructure
                 // Enable sensitive data logging in development
                 if (env.IsDevelopment())
                 {
-                    options.EnableSensitiveDataLogging();
+                    options.EnableSensitiveDataLogging();   // Log cả giá trị parameter
                     options.EnableDetailedErrors();
+                    options.LogTo(
+                        Console.WriteLine,
+                        LogLevel.Information,
+                        DbContextLoggerOptions.UtcTime | DbContextLoggerOptions.SingleLine
+                    );
                 }
+
             });
             // Map interface IUnitOfWork sang ApplicationDbContext
             // Scoped để share instance trong cùng 1 request

@@ -12,6 +12,8 @@ namespace OrderManagement.McpServer.Resources
     public class OrderResource
     {
         private readonly IMediator _mediator;
+        private static readonly string[] AvailableStatuses =
+            Enum.GetNames(typeof(OrderStatus));
 
 
         // Constructor injection — SDK tự inject qua DI
@@ -25,9 +27,7 @@ namespace OrderManagement.McpServer.Resources
         [McpServerResource(
             UriTemplate = "oms://orders/{orderId}",
             Name = "Order Detail",
-            Title = "Chi tiết đầy đủ của một order: thông tin cơ bản, danh sách items, " +
-                          "lịch sử trạng thái. Dùng resource này thay vì tool get_order khi " +
-                          "bạn chỉ cần đọc thông tin mà không có action kèm theo.",
+            Title = "Chi tiết một order với các field thực tế từ DTO: id, customerId, customerEmail, status, totalAmount, currency, shippingAddress, createdAt, updatedAt, items. Status hợp lệ: Draft, Placed, Confirmed, Shipped, Delivered, Cancelled.",
             MimeType = "application/json"
         )]
         public async Task<string> GetOrder(Guid orderId)
@@ -50,7 +50,29 @@ namespace OrderManagement.McpServer.Resources
             }
 
 
-            return JsonSerializer.Serialize(order, new JsonSerializerOptions
+            var response = new
+            {
+                data = order,
+                meta = new
+                {
+                    availableStatuses = AvailableStatuses,
+                    fields = new[]
+                    {
+                        "id",
+                        "customerId",
+                        "customerEmail",
+                        "status",
+                        "totalAmount",
+                        "currency",
+                        "shippingAddress",
+                        "createdAt",
+                        "updatedAt",
+                        "items"
+                    }
+                }
+            };
+
+            return JsonSerializer.Serialize(response, new JsonSerializerOptions
             {
                 WriteIndented = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -61,11 +83,7 @@ namespace OrderManagement.McpServer.Resources
         [McpServerResource(
             UriTemplate = "oms://orders/list",
             Name = "Orders List",
-            Title = "Danh sách orders với filter và pagination. " +
-                          "Parameters: status (filter theo trạng thái), " +
-                          "page (trang hiện tại, mặc định 1), " +
-                          "pageSize (số records mỗi trang, mặc định 20, tối đa 100). " +
-                          "Trả về totalCount để biết tổng số orders.",
+            Title = "Danh sách orders với filter và pagination. Field của mỗi item: id, orderNumber, orderDate, customerName (đang chứa customerEmail), totalAmount, currency, status, itemCount. Status hợp lệ: Draft, Placed, Confirmed, Shipped, Delivered, Cancelled.",
             MimeType = "application/json"
         )]
         public async Task<string> ListOrders(
@@ -107,7 +125,27 @@ namespace OrderManagement.McpServer.Resources
                     hasNextPage = pagedResult.HasNextPage,
                     hasPreviousPage = pagedResult.HasPreviousPage
                 },
-                filter = new { status = status?.ToString() ?? "all" }
+                filter = new { status = status?.ToString() ?? "all" },
+                meta = new
+                {
+                    availableStatuses = AvailableStatuses,
+                    fields = new[]
+                    {
+                        "id",
+                        "orderNumber",
+                        "orderDate",
+                        "customerName",
+                        "totalAmount",
+                        "currency",
+                        "status",
+                        "itemCount"
+                    },
+                    fieldNotes = new
+                    {
+                        customerName = "This field currently contains CustomerEmail from the underlying DTO/query projection.",
+                        orderDate = "This field is mapped from CreatedAt."
+                    }
+                }
             };
 
 
