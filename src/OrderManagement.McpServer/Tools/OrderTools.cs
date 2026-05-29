@@ -183,7 +183,7 @@ namespace OrderManagement.McpServer.Tools
                     return "Error: Order must contain at least one item.";
                 return "Failed to create order: " + result.Error.Description;
             }
-            return $"Order created successfully. Order ID: {result}";
+            return $"Order created successfully. Order ID: {result.Value}";
 
             // Không catch generic Exception ở đây — để middleware xử lý
 
