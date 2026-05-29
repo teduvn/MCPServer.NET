@@ -4,13 +4,14 @@ using Newtonsoft.Json;
 using NSubstitute;
 using OrderManagement.Application.Orders.DTOs;
 using OrderManagement.Application.Orders.Queries;
+using OrderManagement.McpServer.Tools;
 
 namespace OrderManagement.McpServer.Tests
 {
     public class OrderToolsTests
     {
         private readonly IMediator _mediatorMock;
-        private readonly OrderTools.OrderTools _sut;  // System Under Test
+        private readonly OrderTools _sut;  // System Under Test
 
 
         public OrderToolsTests()
@@ -19,7 +20,7 @@ namespace OrderManagement.McpServer.Tests
 
 
             // Constructor inject mock — không cần container thật
-            _sut = new OrderTools.OrderTools(_mediatorMock);
+            _sut = new OrderTools(_mediatorMock);
         }
 
 

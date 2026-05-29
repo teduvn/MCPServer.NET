@@ -31,6 +31,8 @@ namespace OrderManagement.Application
                 // Transaction bao quanh handler — chỉ áp dụng cho ITransactionalCommand
                 cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
 
+                cfg.AddBehavior(typeof(IPipelineBehavior<,>),
+                      typeof(TracingBehavior<,>));   // thêm mới
 
             });
 

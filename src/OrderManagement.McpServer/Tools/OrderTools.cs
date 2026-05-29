@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using ModelContextProtocol.Server;
 using OrderManagement.Application.Common.Exceptions;
+using OrderManagement.Application.Common.Observability;
 using OrderManagement.Application.Orders.Commands.PlaceOrder;
 using OrderManagement.Application.Orders.DTOs;
 using OrderManagement.Application.Orders.Queries;
@@ -9,8 +10,9 @@ using OrderManagement.Domain.Entities;
 using OrderManagement.Domain.Orders;
 using OrderManagement.McpServer.Models;
 using System.ComponentModel;
+using System.Diagnostics;
 
-namespace OrderManagement.McpServer.OrderTools
+namespace OrderManagement.McpServer.Tools
 {
     [McpServerToolType]  // đánh dấu class này chứa MCP tools
     public class OrderTools
@@ -35,13 +37,41 @@ namespace OrderManagement.McpServer.OrderTools
                 "Obtain this from list_orders or search_orders first if you don't have it.")]
             Guid orderId)
         {
-            var query = new GetOrderByIdQuery(orderId);
-            var result = await _mediator.Send(query);
-            if (result.IsFailure)
+            // Span này là parent của span MediatR sẽ tạo
+            using var activity = OmsActivitySource.Instance
+                .StartActivity("McpTool: get_order");
+            activity?.SetTag("mcp.tool", "get_order");
+            activity?.SetTag("order.id", orderId.ToString());
+            var sw = Stopwatch.StartNew();
+
+            try
             {
-                return null;
+                var query = new GetOrderByIdQuery(orderId);
+                var result = await _mediator.Send(query);
+
+                sw.Stop();
+
+                if (result.IsFailure)
+                {
+                    OmsMeter.ToolLatency.Record(sw.ElapsedMilliseconds,new("tool", "get_order"), new("status", "error"));
+                    OmsMeter.ToolCallCount.Add(1, new("tool", "get_order"), new("status", "error"));
+                    return null;
+                }
+
+                OmsMeter.ToolLatency.Record(sw.ElapsedMilliseconds,
+                    new("tool", "get_order"), new("status", "success"));
+                OmsMeter.ToolCallCount.Add(1,
+                    new("tool", "get_order"), new("status", "success"));
+                return result.Value!;
             }
-            return result.Value!;
+            catch (Exception ex)
+            {
+                sw.Stop();
+                OmsMeter.ToolCallCount.Add(1, new ("tool", "get_order"), new ("status", "error"));
+                activity?.AddException(ex);
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                throw;
+            }
         }
 
         [McpServerTool(Name = "get_orders")]
