@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OrderManagement.Application;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Infrastructure;
 using OrderManagement.McpServer.Middlewares;
+using OrderManagement.McpServer.OrderTools;
 using OrderManagement.McpServer.Resources;
 using OrderManagement.McpServer.Services;
 
@@ -19,6 +21,8 @@ builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration, builder.Environment);
 
 // ✅ Đăng ký MCP Server với stdio transport
+//builder.Services.AddScoped<OrderTools>();
+
 builder.Services
     .AddMcpServer()
     .WithHttpTransport()
@@ -28,6 +32,16 @@ builder.Services
                                   //.WithResourcesFromAssembly()   // scan tất cả [McpServerResource] trong assembly
     //.WithStdioServerTransport()   // stdio: dùng console in/out
     .WithToolsFromAssembly();     // scan tất cả [McpServerTool] trong assembly
+
+// Bật ValidateScopes cho Development
+if (builder.Environment.IsDevelopment())
+{
+    builder.Host.UseDefaultServiceProvider(options =>
+    {
+        options.ValidateScopes = true;     // Bắt captive dependency
+        options.ValidateOnBuild = true;    // Validate ngay khi build container
+    });
+}
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICorrelationIdService, CorrelationIdService>();

@@ -8,5 +8,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MyMcpServer/MyMcpServer.csproj" Id="1d449130-70b4-41ff-abaa-84d56b0093ba" />
+    <Project Path="tests/OrderManagement.McpServer.Tests/OrderManagement.McpServer.Tests.csproj" Id="75ce6abb-c4bd-42ee-8735-c13dc28cca5e" />
   </Folder>
 </Solution>
