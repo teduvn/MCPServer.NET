@@ -166,6 +166,25 @@ namespace OrderManagement.Domain.Entities
             });
         }
 
+        public void Cancel(string reason = "")
+        {
+            if (Status is OrderStatus.Shipped or OrderStatus.Delivered or OrderStatus.Cancelled)
+                throw new DomainException(
+                    OrderErrors.InvalidCancellationStatus(Status).Description);
+
+            Status = OrderStatus.Cancelled;
+            UpdatedAt = DateTime.UtcNow;
+
+            RaiseDomainEvent(new OrderCancelledEvent
+            {
+                OrderId = Id,
+                CustomerId = CustomerId,
+                CustomerEmail = CustomerEmail,
+                CancellationReason = reason,
+                CancelledAt = UpdatedAt.Value
+            });
+        }
+
         public void UpdateShippingAddress(Address newAddress)
         {
             EnsureOrderIsModifiable();

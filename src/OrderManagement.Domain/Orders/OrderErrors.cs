@@ -1,6 +1,7 @@
 ﻿
 
 using OrderManagement.Domain.Common;
+using OrderManagement.Domain.Entities;
 using OrderManagement.Domain.ValueObjects;
 
 namespace OrderManagement.Domain.Orders
@@ -19,6 +20,11 @@ namespace OrderManagement.Domain.Orders
 
         public static readonly Error AlreadyShipped =
             Error.Create("Order.AlreadyShipped", "Cannot cancel an order that is already shipped.");
+
+        public static Error InvalidCancellationStatus(OrderStatus status) =>
+            Error.Create(
+                "Order.InvalidCancellationStatus",
+                $"Cannot cancel an order in status '{status}'.");
 
         // Error phụ thuộc vào data — dùng factory method
         public static Error CustomerNotFound(Guid customerId) =>

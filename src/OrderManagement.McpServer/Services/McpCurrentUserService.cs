@@ -11,6 +11,7 @@ namespace OrderManagement.McpServer.Services
     /// </summary>
     public class McpCurrentUserService : ICurrentUserService
     {
+        private static readonly string[] RoleClaimTypes = [ClaimTypes.Role, "role", "roles"];
         private readonly IMcpUserContextAccessor _userContextAccessor;
 
         public McpCurrentUserService(IMcpUserContextAccessor userContextAccessor)
@@ -28,7 +29,19 @@ namespace OrderManagement.McpServer.Services
 
         public bool IsInRole(string role)
         {
-            return User?.IsInRole(role) ?? false;
+            return Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public bool HasClaim(string claimType, string? value = null)
+        {
+            if (User == null)
+            {
+                return false;
+            }
+
+            return value is null
+                ? User.HasClaim(c => c.Type == claimType)
+                : User.HasClaim(claimType, value);
         }
 
         public Guid? UserId
@@ -45,6 +58,19 @@ namespace OrderManagement.McpServer.Services
 
         public bool IsAuthenticated =>
             User?.Identity?.IsAuthenticated ?? false;
+
+        public IReadOnlyList<string> Roles => User?.Claims
+            .Where(c => RoleClaimTypes.Contains(c.Type, StringComparer.OrdinalIgnoreCase))
+            .Select(c => c.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+
+        public IReadOnlyList<KeyValuePair<string, string>> GetAllClaims()
+        {
+            return User?.Claims
+                .Select(c => new KeyValuePair<string, string>(c.Type, c.Value))
+                .ToArray() ?? [];
+        }
     }
 
 }

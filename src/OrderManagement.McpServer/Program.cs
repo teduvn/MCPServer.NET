@@ -1,6 +1,8 @@
-﻿using OpenIddict.Validation.AspNetCore;
+﻿using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
+using OpenIddict.Validation.AspNetCore;
 using OrderManagement.Application;
+using OrderManagement.Application.Common.Authorization;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Infrastructure;
@@ -8,7 +10,6 @@ using OrderManagement.McpServer.Extensions;
 using OrderManagement.McpServer.Middlewares;
 using OrderManagement.McpServer.Resources;
 using OrderManagement.McpServer.Services;
-using ModelContextProtocol.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,11 +57,17 @@ builder.Services.AddAuthentication(options =>
         {
             Resource = resourceMetadataResource,
             AuthorizationServers = { authAuthority },
-            ScopesSupported = [ "mcp_api", authAudience ]
+            ScopesSupported = [ "mcp_api", authAudience, "roles", "email", "profile" ]
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // Tái sử dụng cùng policy definition với Web API
+    // Tập trung định nghĩa ở một chỗ: PolicyRegistrar
+    PolicyRegistrar.RegisterPolicies(options);
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(InspectorCorsPolicy, policy =>
@@ -81,10 +88,6 @@ builder.Services.AddOpenIddict()
     {
         options.SetIssuer(new Uri(authAuthority));
         options.AddAudiences(authAudience);
-
-        options.UseIntrospection()
-            .SetClientId(authClientId)
-            .SetClientSecret(authClientSecret);
 
         options.UseSystemNetHttp();
         options.UseAspNetCore();

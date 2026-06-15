@@ -1,16 +1,22 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol.Server;
+using OrderManagement.Application.Common.Authorization;
 using OrderManagement.Application.Common.Exceptions;
 using OrderManagement.Application.Common.Observability;
+using OrderManagement.Application.Contracts;
+using OrderManagement.Application.Orders.Commands.CancelOrder;
 using OrderManagement.Application.Orders.Commands.PlaceOrder;
 using OrderManagement.Application.Orders.DTOs;
 using OrderManagement.Application.Orders.Queries;
 using OrderManagement.Domain.Common;
 using OrderManagement.Domain.Entities;
 using OrderManagement.Domain.Orders;
+using OrderManagement.McpServer.Authorization;
 using OrderManagement.McpServer.Models;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace OrderManagement.McpServer.Tools
 {
@@ -18,10 +24,13 @@ namespace OrderManagement.McpServer.Tools
     public class OrderTools
     {
         private readonly IMediator _mediator;
-
-        public OrderTools(IMediator mediator)
+        private readonly ICurrentUserService _currentUserService;
+        public OrderTools(
+            IMediator mediator,
+            ICurrentUserService currentUserService)
         {
             _mediator = mediator;
+            _currentUserService = currentUserService;
         }
 
 
@@ -139,6 +148,9 @@ namespace OrderManagement.McpServer.Tools
             if (request.Items == null || request.Items.Count == 0)
                 return "Error: Order must contain at least one item.";
 
+            if (request.ShippingAddress is null)
+                return "Error: ShippingAddress is required.";
+
 
             foreach (var item in request.Items)
             {
@@ -187,6 +199,79 @@ namespace OrderManagement.McpServer.Tools
 
             // Không catch generic Exception ở đây — để middleware xử lý
 
+        }
+
+        [McpServerTool(Name = "cancel_order")]
+        [RequiresRole("Manager")]
+        [Description(
+            "Cancel an existing order by its GUID. " +
+            "Only Manager role can perform this action. " +
+            "Orders already shipped, delivered, or cancelled cannot be cancelled.")]
+        public async Task<string> CancelOrder(
+            [Description("The order ID in GUID format.")]
+            Guid orderId,
+            [Description("Optional cancellation reason for audit trail.")]
+            string? reason = null)
+        {
+            await AuthorizeOrThrow("CanCancelOrder");
+
+            var result = await _mediator.Send(new CancelOrderCommand(orderId, reason));
+            if (result.IsFailure)
+                return $"Failed to cancel order: {result.Error.Description}";
+
+            return $"Order '{orderId}' cancelled successfully.";
+        }
+
+
+        [McpServerTool(Name = "get_revenue")]
+        [RequiresRole("Analyst", "Manager")]
+        [Description(
+            "Retrieve monthly revenue statistics for a given month and year. " +
+            "Only Analyst and Manager roles can access this report. " +
+            "Returns revenue grouped by currency, excluding cancelled orders.")]
+        public async Task<string> GetRevenueStatistics(
+            [Description("Month number from 1 to 12.")] int month,
+            [Description("Four-digit year, for example 2026.")] int year)
+        {
+            await AuthorizeOrThrow("CanViewRevenue");
+
+            if (month < 1 || month > 12)
+                return "Error: Month must be between 1 and 12.";
+
+            if (year < 2000 || year > 3000)
+                return "Error: Year must be between 2000 and 3000.";
+
+            var result = await _mediator.Send(new GetRevenueQuery(month, year));
+            if (result.IsFailure)
+                return $"Failed to get revenue statistics: {result.Error.Description}";
+
+            return JsonSerializer.Serialize(result);
+        }
+
+        private async Task AuthorizeOrThrow(string policyName)
+        {
+            if (!_currentUserService.IsAuthenticated)
+                throw new UnauthorizedAccessException("User context not found.");
+
+            string[] requiredPermissions = policyName switch
+            {
+                "CanCancelOrder" => [Permissions.Orders.Cancel],
+                "CanViewRevenue" => [Permissions.Reports.ViewRevenue, Permissions.Orders.Manage],
+                "CanManageOrders" => [Permissions.Orders.Manage],
+                _ => throw new InvalidOperationException($"Unknown policy '{policyName}'.")
+            };
+
+            var isAuthorized = requiredPermissions.Any(permission =>
+                _currentUserService.HasClaim("permission", permission));
+
+            if (!isAuthorized)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Access denied by policy '{policyName}'. " +
+                    $"Required permission(s): {string.Join(" or ", requiredPermissions)}.");
+            }
+
+            await Task.CompletedTask;
         }
 
     }

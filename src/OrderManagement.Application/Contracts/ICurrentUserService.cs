@@ -26,9 +26,16 @@ namespace OrderManagement.Application.Contracts
         bool IsInRole(string role);
 
         /// <summary>
+        /// Kiểm tra user có claim cụ thể không.
+        /// </summary>
+        bool HasClaim(string claimType, string? value = null);
+
+        /// <summary>
         /// true nếu request đã được authenticated.
         /// </summary>
         bool IsAuthenticated { get; }
+
+        IReadOnlyList<string> Roles { get; }
     }
 
 }

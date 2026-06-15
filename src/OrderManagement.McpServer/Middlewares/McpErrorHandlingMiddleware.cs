@@ -27,6 +27,30 @@ namespace OrderManagement.McpServer.Middlewares
             {
                 await _next(context);
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning("MCP Tool authorization failed: {Message}", ex.Message);
+
+
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "application/json";
+
+
+                // Trả về JSON-RPC error format để MCP Client xử lý đúng
+                var error = new
+                {
+                    jsonrpc = "2.0",
+                    error = new
+                    {
+                        code = -32603, // Internal error code theo MCP spec
+                        message = ex.Message,
+                        data = new { type = "authorization_error", statusCode = 403 }
+                    }
+                };
+
+
+                await context.Response.WriteAsJsonAsync(error);
+            }
             catch (Exception ex)
             {
                 // Log đầy đủ để dev debug
