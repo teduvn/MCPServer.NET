@@ -43,6 +43,8 @@ var authAuthorizationServerMetadataUrl = new Uri(new Uri(authAuthority), ".well-
 var authTokenEndpointUrl = new Uri(new Uri(authAuthority), "connect/token");
 const string InspectorCorsPolicy = "InspectorCors";
 
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
@@ -69,6 +71,10 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddHttpClient();
+
+builder.Services.AddSingleton<IMcpUserContextAccessor, McpUserContextAccessor>();
+builder.Services.AddScoped<McpCurrentUserService>();
+
 
 builder.Services.AddOpenIddict()
     .AddValidation(options =>
@@ -109,7 +115,11 @@ if (builder.Environment.IsDevelopment())
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICorrelationIdService, CorrelationIdService>();
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+// Đăng ký ICurrentUserService trỏ đến McpCurrentUserService
+// Application Layer chỉ biết ICurrentUserService — không biết implementation
+builder.Services.AddScoped<ICurrentUserService>(
+    sp => sp.GetRequiredService<McpCurrentUserService>());
+
 
 var app = builder.Build();
 
@@ -118,6 +128,8 @@ app.UseMiddleware<McpErrorHandlingMiddleware>();
 app.UseCors(InspectorCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseMiddleware<McpUserContextMiddleware>();
 
 app.MapGet("/authorize", (HttpContext httpContext) =>
 {
