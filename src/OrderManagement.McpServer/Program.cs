@@ -1,16 +1,14 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+﻿using OpenIddict.Validation.AspNetCore;
+using ModelContextProtocol.Authentication;
 using OrderManagement.Application;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Infrastructure;
 using OrderManagement.McpServer.Extensions;
 using OrderManagement.McpServer.Middlewares;
-using OrderManagement.McpServer.Tools;
 using OrderManagement.McpServer.Resources;
 using OrderManagement.McpServer.Services;
+using ModelContextProtocol.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +31,58 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration, builder.Environment);
 builder.Services.AddOmsObservability(builder.Configuration, builder.Environment);
+
+var authSection = builder.Configuration.GetSection("Authentication");
+var authAuthority = authSection["Authority"] ?? "http://localhost:7212/";
+var authAudience = authSection["Audience"] ?? "order-management-mcp";
+var authClientId = authSection["ClientId"] ?? "ordermanagement-mcp";
+var authClientSecret = authSection["ClientSecret"] ?? "ordermanagement-mcp-secret";
+var resourceMetadataResource = authSection["Resource"] ?? "http://localhost:5200/mcp";
+var authOpenIdConfigurationUrl = new Uri(new Uri(authAuthority), ".well-known/openid-configuration");
+var authAuthorizationServerMetadataUrl = new Uri(new Uri(authAuthority), ".well-known/oauth-authorization-server");
+var authTokenEndpointUrl = new Uri(new Uri(authAuthority), "connect/token");
+const string InspectorCorsPolicy = "InspectorCors";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
+})
+    .AddMcp(options =>
+    {
+        options.ResourceMetadata = new ProtectedResourceMetadata
+        {
+            Resource = resourceMetadataResource,
+            AuthorizationServers = { authAuthority },
+            ScopesSupported = [ "mcp_api", authAudience ]
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(InspectorCorsPolicy, policy =>
+    {
+        policy.WithOrigins("http://localhost:6274")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+builder.Services.AddHttpClient();
+
+builder.Services.AddOpenIddict()
+    .AddValidation(options =>
+    {
+        options.SetIssuer(new Uri(authAuthority));
+        options.AddAudiences(authAudience);
+
+        options.UseIntrospection()
+            .SetClientId(authClientId)
+            .SetClientSecret(authClientSecret);
+
+        options.UseSystemNetHttp();
+        options.UseAspNetCore();
+    });
 
 // ✅ Đăng ký MCP Server với stdio transport
 //builder.Services.AddScoped<OrderTools>();
@@ -59,12 +109,67 @@ if (builder.Environment.IsDevelopment())
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICorrelationIdService, CorrelationIdService>();
-builder.Services.AddScoped<ICurrentUserService, FakeCurrentUserService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 var app = builder.Build();
 
 // Middleware phải đăng ký TRƯỚC MapMcp()
 app.UseMiddleware<McpErrorHandlingMiddleware>();
+app.UseCors(InspectorCorsPolicy);
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapMcp("/mcp"); // MCP server sẽ lắng nghe tại endpoint /mcp
+app.MapGet("/authorize", (HttpContext httpContext) =>
+{
+    var authorizeUri = new Uri(new Uri(authAuthority), "connect/authorize");
+    var query = httpContext.Request.QueryString.HasValue
+        ? httpContext.Request.QueryString.Value
+        : string.Empty;
+
+    return Results.Redirect(authorizeUri + query, permanent: false);
+});
+
+app.MapGet("/.well-known/openid-configuration", async (IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
+{
+    var client = httpClientFactory.CreateClient();
+    var json = await client.GetStringAsync(authOpenIdConfigurationUrl, cancellationToken);
+    return Results.Text(json, "application/json");
+}).RequireCors(InspectorCorsPolicy);
+
+app.MapGet("/.well-known/oauth-authorization-server", async (IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
+{
+    var client = httpClientFactory.CreateClient();
+    var json = await client.GetStringAsync(authAuthorizationServerMetadataUrl, cancellationToken);
+    return Results.Text(json, "application/json");
+}).RequireCors(InspectorCorsPolicy);
+
+app.MapMethods("/token", new[] { "OPTIONS", "POST" }, async (HttpContext httpContext, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken) =>
+{
+    if (HttpMethods.IsOptions(httpContext.Request.Method))
+    {
+        return Results.Ok();
+    }
+
+    var form = await httpContext.Request.ReadFormAsync(cancellationToken);
+    var payload = form.Select(pair => new KeyValuePair<string, string>(pair.Key, pair.Value.ToString()));
+
+    using var requestMessage = new HttpRequestMessage(HttpMethod.Post, authTokenEndpointUrl)
+    {
+        Content = new FormUrlEncodedContent(payload)
+    };
+
+    if (httpContext.Request.Headers.TryGetValue("Authorization", out var authorization))
+    {
+        requestMessage.Headers.TryAddWithoutValidation("Authorization", authorization.ToString());
+    }
+
+    var client = httpClientFactory.CreateClient();
+    using var response = await client.SendAsync(requestMessage, cancellationToken);
+    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+    var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json";
+
+    return Results.Text(body, contentType, statusCode: (int)response.StatusCode);
+}).RequireCors(InspectorCorsPolicy);
+
+app.MapMcp("/mcp").RequireAuthorization(); // MCP server sẽ lắng nghe tại endpoint /mcp
 await app.RunAsync();

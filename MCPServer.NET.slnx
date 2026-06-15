@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/OrderManagement.Application/OrderManagement.Application.csproj" />
+    <Project Path="src/OrderManagement.AuthServer/OrderManagement.AuthServer.csproj" Id="0c700481-017f-4ff2-82e1-a1ee7284aa6d" />
     <Project Path="src/OrderManagement.Domain/OrderManagement.Domain.csproj" />
     <Project Path="src/OrderManagement.Infrastructure/OrderManagement.Infrastructure.csproj" />
     <Project Path="src/OrderManagement.McpServer/OrderManagement.McpServer.csproj" Id="065f644d-7c1c-4d9a-8b71-75c3ae700ee0">
