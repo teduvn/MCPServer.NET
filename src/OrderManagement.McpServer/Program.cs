@@ -10,8 +10,29 @@ using OrderManagement.McpServer.Extensions;
 using OrderManagement.McpServer.Middlewares;
 using OrderManagement.McpServer.Resources;
 using OrderManagement.McpServer.Services;
+using Serilog;
+using Serilog.Events;
+
+// Program.cs (hoặc appsettings.json)
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "OMS-McpServer")
+    .WriteTo.Console(outputTemplate:
+        "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        path: "logs/audit-.log",
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}" +
+            " [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    // Nếu có Seq:
+    // .WriteTo.Seq("http://localhost:5341")
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
+
 
 // ✅ User Secrets tự động được load trong Development environment
 // Configuration priority (cao → thấp):
@@ -80,6 +101,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<IMcpUserContextAccessor, McpUserContextAccessor>();
+builder.Services.AddScoped<IMcpContextAccessor, McpContextAccessor>();
+
 builder.Services.AddScoped<McpCurrentUserService>();
 
 

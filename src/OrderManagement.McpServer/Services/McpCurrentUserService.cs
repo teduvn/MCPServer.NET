@@ -1,4 +1,5 @@
 ﻿using Microsoft.IdentityModel.JsonWebTokens;
+using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using System.Security.Claims;
 

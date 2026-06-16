@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol.Server;
 using OrderManagement.Application.Common.Authorization;
 using OrderManagement.Application.Common.Exceptions;
+using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Common.Observability;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Application.Orders.Commands.CancelOrder;
@@ -25,12 +26,15 @@ namespace OrderManagement.McpServer.Tools
     {
         private readonly IMediator _mediator;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IMcpContextAccessor _mcpContextAccessor;
         public OrderTools(
             IMediator mediator,
-            ICurrentUserService currentUserService)
+            ICurrentUserService currentUserService,
+            IMcpContextAccessor mcpContextAccessor)
         {
             _mediator = mediator;
             _currentUserService = currentUserService;
+            _mcpContextAccessor = mcpContextAccessor;
         }
 
 
@@ -214,6 +218,7 @@ namespace OrderManagement.McpServer.Tools
             string? reason = null)
         {
             await AuthorizeOrThrow("CanCancelOrder");
+            _mcpContextAccessor.SetTool("cancel_order");
 
             var result = await _mediator.Send(new CancelOrderCommand(orderId, reason));
             if (result.IsFailure)

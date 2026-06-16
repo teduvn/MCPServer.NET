@@ -65,10 +65,7 @@ dotnet ef migrations add <MigrationName> `
 
 **Example:**
 ```bash
-dotnet ef migrations add AddIdentityTables `
-  --project src/OrderManagement.Infrastructure `
-  --startup-project src/OrderManagement.WebAPI `
-  --output-dir Persistence/Migrations
+dotnet ef migrations add AddAuditLogs --project src/OrderManagement.Infrastructure --startup-project src/OrderManagement.WebAPI --output-dir Persistence/Migrations
 ```
 
 ### Listing Migrations
@@ -88,9 +85,7 @@ dotnet ef migrations list `
 Apply migrations to update the database:
 
 ```bash
-dotnet ef database update `
-  --project src/OrderManagement.Infrastructure `
-  --startup-project src/OrderManagement.WebAPI
+dotnet ef database update --project src/OrderManagement.Infrastructure --startup-project src/OrderManagement.WebAPI
 ```
 
 #### Production Deployment (SQL Script Approach)

@@ -1,6 +1,6 @@
 ﻿using System.Security.Claims;
 
-namespace OrderManagement.McpServer.Services
+namespace OrderManagement.Application.Common.Interfaces
 {
     public interface IMcpUserContextAccessor
     {

@@ -1,4 +1,4 @@
-﻿using OrderManagement.McpServer.Services;
+﻿using OrderManagement.Application.Common.Interfaces;
 
 namespace OrderManagement.McpServer.Middlewares
 {

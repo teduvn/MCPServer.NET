@@ -28,6 +28,9 @@ namespace OrderManagement.Application
                 // Thứ tự quan trọng: Behavior đăng ký trước chạy trước
                 cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 
+                // Audit phải nằm ngoài transaction để log failure không bị rollback.
+                cfg.AddOpenBehavior(typeof(AuditLogBehavior<,>));
+
                 // Transaction bao quanh handler — chỉ áp dụng cho ITransactionalCommand
                 cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
 

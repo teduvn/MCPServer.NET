@@ -109,6 +109,7 @@ namespace OrderManagement.Infrastructure
         private static IServiceCollection AddRepositories(
             this IServiceCollection services)
         {
+            services.AddScoped<IAuditLogRepository, AuditLogRepository>();
             services.AddScoped<IOrderRepository, OrderRepository>();
             services.AddScoped<ICustomerRepository, CustomerRepository>();
             services.AddScoped<IUserRepository, UserRepository>();

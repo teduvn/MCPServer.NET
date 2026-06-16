@@ -21,6 +21,7 @@ namespace OrderManagement.Infrastructure.Persistence
         public DbSet<Product> Products => Set<Product>();
         public DbSet<Customer> Customers => Set<Customer>();
         public DbSet<Voucher> Vouchers => Set<Voucher>();
+        public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         public new DbSet<User> Users => Set<User>();
         public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
