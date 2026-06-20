@@ -11,6 +11,7 @@ namespace OrderManagement.WebAPI.Services
     public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor)
         : ICurrentUserService
     {
+        private static readonly string[] RoleClaimTypes = [ClaimTypes.Role, "role", "roles"];
         private ClaimsPrincipal? User => httpContextAccessor.HttpContext?.User;
 
         public Guid? UserId
@@ -26,7 +27,25 @@ namespace OrderManagement.WebAPI.Services
 
         public bool IsAuthenticated => User?.Identity?.IsAuthenticated ?? false;
 
-        public bool IsInRole(string role) => User?.IsInRole(role) ?? false;
+        public IReadOnlyList<string> Roles => User?.Claims
+            .Where(c => RoleClaimTypes.Contains(c.Type, StringComparer.OrdinalIgnoreCase))
+            .Select(c => c.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+
+        public bool IsInRole(string role) => Roles.Contains(role, StringComparer.OrdinalIgnoreCase);
+
+        public bool HasClaim(string claimType, string? value = null)
+        {
+            if (User == null)
+            {
+                return false;
+            }
+
+            return value is null
+                ? User.HasClaim(c => c.Type == claimType)
+                : User.HasClaim(claimType, value);
+        }
     }
 
 }

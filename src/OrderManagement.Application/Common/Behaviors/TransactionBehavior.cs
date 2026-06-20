@@ -34,14 +34,12 @@ namespace OrderManagement.Application.Common.Behaviors
             _logger.LogInformation(
                 "[Transaction] Beginning transaction for {RequestName}", requestName);
 
-            await _unitOfWork.BeginTransactionAsync(cancellationToken);
-
             try
             {
-                // Chạy handler bên trong transaction
-                var response = await next();
-
-                await _unitOfWork.CommitTransactionAsync(cancellationToken);
+                // Chạy handler bên trong execution strategy + transaction retriable unit
+                var response = await _unitOfWork.ExecuteInTransactionAsync(
+                    _ => next(),
+                    cancellationToken);
 
                 _logger.LogInformation(
                     "[Transaction] Transaction committed for {RequestName}", requestName);
@@ -53,7 +51,6 @@ namespace OrderManagement.Application.Common.Behaviors
                 _logger.LogError(ex,
                     "[Transaction] Transaction rolled back for {RequestName}", requestName);
 
-                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
                 throw;
             }
         }

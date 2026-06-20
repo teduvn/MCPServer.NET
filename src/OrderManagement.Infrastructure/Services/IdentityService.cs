@@ -38,14 +38,12 @@ namespace OrderManagement.Infrastructure.Services
                 EmailConfirmed = true
             };
 
-            await unitOfWork.BeginTransactionAsync(ct);
-            try
+            return await unitOfWork.ExecuteInTransactionAsync(async _ =>
             {
                 // Ghi AppUser qua UserManager — Identity xử lý hash password, stamp
                 var result = await userManager.CreateAsync(appUser, password);
                 if (!result.Succeeded)
                 {
-                    await unitOfWork.RollbackTransactionAsync(ct);
                     var errors = string.Join(", ", result.Errors.Select(e => e.Description));
                     return Result<Guid>.Failure(new Error("Identity.CreateFailed", errors));
                 }
@@ -54,15 +52,8 @@ namespace OrderManagement.Infrastructure.Services
                 var domainUser = User.Create(userId, fullName, email);
                 await userRepository.AddAsync(domainUser, ct);
 
-                // CommitTransactionAsync tự gọi SaveChangesAsync bên trong
-                await unitOfWork.CommitTransactionAsync(ct);
                 return Result<Guid>.Success(userId);
-            }
-            catch
-            {
-                await unitOfWork.RollbackTransactionAsync(ct);
-                throw;
-            }
+            }, ct);
         }
 
         public async Task<Result<Guid>> ValidateCredentialsAsync(

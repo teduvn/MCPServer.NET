@@ -12,6 +12,7 @@ namespace OrderManagement.Application.Common.Interfaces
         DbSet<Product> Products { get; }
         DbSet<Customer> Customers { get; }
         DbSet<Voucher> Vouchers { get; }
+        DbSet<AuditLog> AuditLogs { get; }
         Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     }
 

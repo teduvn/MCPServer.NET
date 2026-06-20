@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Contracts;
 using OrderManagement.Domain.Interfaces;
@@ -47,27 +49,42 @@ namespace OrderManagement.Infrastructure
             IConfiguration configuration,
             IHostEnvironment env)
         {
+            var useInMemoryDatabase = configuration.GetValue<bool>("Database:UseInMemory");
+
             // Đăng ký DbContext
             services.AddDbContext<ApplicationDbContext>(options =>
             {
-                options.UseSqlServer(
-                    configuration.GetConnectionString("DefaultConnection"),
-                    sqlOptions =>
-                    {
-                        sqlOptions.MigrationsAssembly(
-                            typeof(ApplicationDbContext).Assembly.FullName);
-                        sqlOptions.EnableRetryOnFailure(   // built-in retry cho transient error
-                            maxRetryCount: 3,
-                            maxRetryDelay: TimeSpan.FromSeconds(5),
-                            errorNumbersToAdd: null);
-                    });
+                if (useInMemoryDatabase)
+                {
+                    options.UseInMemoryDatabase("OrderManagementMcpServerDb");
+                }
+                else
+                {
+                    options.UseSqlServer(
+                        configuration.GetConnectionString("DefaultConnection"),
+                        sqlOptions =>
+                        {
+                            sqlOptions.MigrationsAssembly(
+                                typeof(ApplicationDbContext).Assembly.FullName);
+                            sqlOptions.EnableRetryOnFailure(   // built-in retry cho transient error
+                                maxRetryCount: 3,
+                                maxRetryDelay: TimeSpan.FromSeconds(5),
+                                errorNumbersToAdd: null);
+                        });
+                }
 
                 // Enable sensitive data logging in development
                 if (env.IsDevelopment())
                 {
-                    options.EnableSensitiveDataLogging();
+                    options.EnableSensitiveDataLogging();   // Log cả giá trị parameter
                     options.EnableDetailedErrors();
+                    options.LogTo(
+                        Console.WriteLine,
+                        LogLevel.Information,
+                        DbContextLoggerOptions.UtcTime | DbContextLoggerOptions.SingleLine
+                    );
                 }
+
             });
             // Map interface IUnitOfWork sang ApplicationDbContext
             // Scoped để share instance trong cùng 1 request
@@ -78,7 +95,7 @@ namespace OrderManagement.Infrastructure
             services.AddScoped<IApplicationDbContext>(
                 sp => sp.GetRequiredService<ApplicationDbContext>());
 
-            // Register IDbConnectionFactory
+            // Register IDbConnectionFactory for query handlers using Dapper.
             services.AddScoped<IDbConnectionFactory, SqlConnectionFactory>();
 
             // Đăng ký seeders
@@ -86,11 +103,8 @@ namespace OrderManagement.Infrastructure
             services.AddScoped<IDataSeeder, AdminUserSeeder>();
 
             // Development seeder chỉ đăng ký khi chạy dev environment
-            if (env.IsDevelopment())
-            {
-                services.AddScoped<IDataSeeder, DevelopmentCustomerSeeder>();
-                services.AddScoped<IDataSeeder, DevelopmentOrderSeeder>();
-            }
+            services.AddScoped<IDataSeeder, DevelopmentCustomerSeeder>();
+            services.AddScoped<IDataSeeder, DevelopmentOrderSeeder>();
 
 
 
@@ -101,6 +115,7 @@ namespace OrderManagement.Infrastructure
         private static IServiceCollection AddRepositories(
             this IServiceCollection services)
         {
+            services.AddScoped<IAuditLogRepository, AuditLogRepository>();
             services.AddScoped<IOrderRepository, OrderRepository>();
             services.AddScoped<ICustomerRepository, CustomerRepository>();
             services.AddScoped<IUserRepository, UserRepository>();

@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Domain.Common;
 using OrderManagement.Domain.Entities;
@@ -20,11 +21,11 @@ namespace OrderManagement.Infrastructure.Persistence
         public DbSet<Product> Products => Set<Product>();
         public DbSet<Customer> Customers => Set<Customer>();
         public DbSet<Voucher> Vouchers => Set<Voucher>();
+        public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         public new DbSet<User> Users => Set<User>();
         public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
         private readonly IPublisher _publisher;
-
 
         public ApplicationDbContext(
             DbContextOptions<ApplicationDbContext> options,
@@ -106,19 +107,48 @@ namespace OrderManagement.Infrastructure.Persistence
         }
 
 
-        public Task BeginTransactionAsync(CancellationToken cancellationToken = default)
+        public async Task ExecuteInTransactionAsync(
+            Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            if (Database.CurrentTransaction is not null)
+            {
+                await operation(cancellationToken);
+                return;
+            }
+
+            var strategy = Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+
+                await operation(cancellationToken);
+                await SaveChangesAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+            });
         }
 
-        public Task CommitTransactionAsync(CancellationToken cancellationToken = default)
+        public async Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
-        }
+            if (Database.CurrentTransaction is not null)
+                return await operation(cancellationToken);
 
-        public Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
-        {
-            throw new NotImplementedException();
+            var strategy = Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+
+                var result = await operation(cancellationToken);
+                await SaveChangesAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+                return result;
+            });
         }
     }
 }

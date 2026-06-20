@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+﻿using Microsoft.EntityFrameworkCore;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Domain.Common;
 using OrderManagement.Domain.Interfaces;
@@ -13,7 +13,6 @@ namespace OrderManagement.Infrastructure.Persistence
     {
         private readonly ApplicationDbContext _context;
         private readonly IDomainEventDispatcher _dispatcher;
-        private IDbContextTransaction? _currentTransaction;
 
         public UnitOfWork(
             ApplicationDbContext context,
@@ -23,53 +22,52 @@ namespace OrderManagement.Infrastructure.Persistence
             _dispatcher = dispatcher;
         }
 
-        public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
+        public async Task ExecuteInTransactionAsync(
+            Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default)
         {
-            // Không cho phép lồng transaction
-            if (_currentTransaction is not null)
-                throw new InvalidOperationException(
-                    "Đã có transaction đang chạy. Commit hoặc Rollback trước khi bắt đầu transaction mới.");
-
-            _currentTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        }
-
-        public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
-        {
-            if (_currentTransaction is null)
-                throw new InvalidOperationException("Chưa có transaction nào được bắt đầu.");
-
-            try
+            if (_context.Database.CurrentTransaction is not null)
             {
+                await operation(cancellationToken);
+                return;
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+                await operation(cancellationToken);
                 await _context.SaveChangesAsync(cancellationToken);
-                await _currentTransaction.CommitAsync(cancellationToken);
-            }
-            catch
-            {
-                await RollbackTransactionAsync(cancellationToken);
-                throw;
-            }
-            finally
-            {
-                await _currentTransaction.DisposeAsync();
-                _currentTransaction = null;
-            }
+
+                await transaction.CommitAsync(cancellationToken);
+            });
         }
 
-        public void Dispose() => _currentTransaction?.Dispose();
-
-        public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
+        public async Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default)
         {
-            if (_currentTransaction is null) return; // Idempotent — gọi nhiều lần không lỗi
+            if (_context.Database.CurrentTransaction is not null)
+                return await operation(cancellationToken);
 
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
             {
-                await _currentTransaction.RollbackAsync(cancellationToken);
-            }
-            finally
-            {
-                await _currentTransaction.DisposeAsync();
-                _currentTransaction = null;
-            }
+                await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+                var result = await operation(cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+                return result;
+            });
+        }
+
+        public void Dispose()
+        {
         }
 
         public async Task<int> SaveChangesAsync(CancellationToken ct = default)

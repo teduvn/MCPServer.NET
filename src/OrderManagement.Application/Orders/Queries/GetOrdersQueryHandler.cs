@@ -3,6 +3,7 @@ using MediatR;
 using OrderManagement.Application.Common.Interfaces;
 using OrderManagement.Application.Orders.DTOs;
 using OrderManagement.Domain.Common;
+using OrderManagement.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Text;

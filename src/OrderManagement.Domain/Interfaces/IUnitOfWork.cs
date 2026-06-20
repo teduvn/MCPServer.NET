@@ -9,9 +9,13 @@ namespace OrderManagement.Domain.Interfaces
         // Commit tất cả thay đổi đang chờ vào database
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
-        // Quản lý transaction tường minh khi cần
-        Task BeginTransactionAsync(CancellationToken cancellationToken = default);
-        Task CommitTransactionAsync(CancellationToken cancellationToken = default);
-        Task RollbackTransactionAsync(CancellationToken cancellationToken = default);
+        // Chạy toàn bộ logic trong 1 retriable transaction unit (tương thích EF execution strategy)
+        Task ExecuteInTransactionAsync(
+            Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default);
+
+        Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default);
     }
 }
