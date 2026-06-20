@@ -1,4 +1,5 @@
-﻿using ModelContextProtocol.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.RateLimiting;
+using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
 using OpenIddict.Validation.AspNetCore;
 using OrderManagement.Application;
@@ -12,6 +13,7 @@ using OrderManagement.McpServer.Resources;
 using OrderManagement.McpServer.Services;
 using Serilog;
 using Serilog.Events;
+using System.Threading.RateLimiting;
 
 // Program.cs (hoặc appsettings.json)
 Log.Logger = new LoggerConfiguration()
@@ -48,6 +50,50 @@ builder.Host.UseSerilog();
 
 // Tắt console logger mặc định
 //builder.Logging.ClearProviders();
+
+builder.Services.AddRateLimiter(options =>
+{
+    // Policy mặc định: áp dụng cho tất cả endpoint
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+    {
+        // Partition key: dùng API key hoặc IP address
+        // Trong MCP context, dùng Authorization header làm identifier
+        var clientId = ctx.Request.Headers["Authorization"].FirstOrDefault()
+                       ?? ctx.Connection.RemoteIpAddress?.ToString()
+                       ?? "anonymous";
+
+
+        return RateLimitPartition.GetSlidingWindowLimiter(clientId, _ =>
+            new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6, // Chia 1 phút thành 6 segment x 10 giây
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0 // Không queue — reject ngay
+            });
+    });
+
+
+    // Khi bị rate limit: trả 429 với message rõ ràng cho AI
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = 429;
+        context.HttpContext.Response.ContentType = "application/json";
+
+
+        var message = new
+        {
+            error = "rate_limit_exceeded",
+            message = "Quá nhiều request. Vui lòng chờ 60 giây trước khi thử lại.",
+            retryAfter = 60
+        };
+
+
+        await context.HttpContext.Response.WriteAsJsonAsync(message, token);
+    };
+});
+
 
 // ✅ Tái sử dụng DI từ Web API — không viết lại
 builder.Services.AddApplicationServices();
@@ -155,6 +201,10 @@ app.UseCors(InspectorCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseMiddleware<ToolTimeoutMiddleware>();
+// Áp dụng middleware
+app.UseRateLimiter();
+
 app.UseMiddleware<McpUserContextMiddleware>();
 
 app.MapGet("/authorize", (HttpContext httpContext) =>
@@ -209,5 +259,8 @@ app.MapMethods("/token", new[] { "OPTIONS", "POST" }, async (HttpContext httpCon
     return Results.Text(body, contentType, statusCode: (int)response.StatusCode);
 }).RequireCors(InspectorCorsPolicy);
 
-app.MapMcp("/mcp").RequireAuthorization(); // MCP server sẽ lắng nghe tại endpoint /mcp
+app.MapMcp("/mcp")
+    .RequireRateLimiting("mcp")
+    .RequireAuthorization(); // MCP server sẽ lắng nghe tại endpoint /mcp
+
 await app.RunAsync();

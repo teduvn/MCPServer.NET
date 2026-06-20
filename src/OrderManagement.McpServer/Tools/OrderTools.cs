@@ -27,14 +27,21 @@ namespace OrderManagement.McpServer.Tools
         private readonly IMediator _mediator;
         private readonly ICurrentUserService _currentUserService;
         private readonly IMcpContextAccessor _mcpContextAccessor;
+        private readonly ICacheService _cacheService;
+        private readonly ILogger<OrderTools> _logger;
+
         public OrderTools(
             IMediator mediator,
             ICurrentUserService currentUserService,
-            IMcpContextAccessor mcpContextAccessor)
+            IMcpContextAccessor mcpContextAccessor,
+            ICacheService cacheService,
+            ILogger<OrderTools> logger)
         {
             _mediator = mediator;
             _currentUserService = currentUserService;
             _mcpContextAccessor = mcpContextAccessor;
+            _cacheService = cacheService;
+            _logger = logger;
         }
 
 
@@ -59,6 +66,7 @@ namespace OrderManagement.McpServer.Tools
 
             try
             {
+
                 var query = new GetOrderByIdQuery(orderId);
                 var result = await _mediator.Send(query);
 
@@ -66,7 +74,7 @@ namespace OrderManagement.McpServer.Tools
 
                 if (result.IsFailure)
                 {
-                    OmsMeter.ToolLatency.Record(sw.ElapsedMilliseconds,new("tool", "get_order"), new("status", "error"));
+                    OmsMeter.ToolLatency.Record(sw.ElapsedMilliseconds, new("tool", "get_order"), new("status", "error"));
                     OmsMeter.ToolCallCount.Add(1, new("tool", "get_order"), new("status", "error"));
                     return null;
                 }
@@ -80,7 +88,7 @@ namespace OrderManagement.McpServer.Tools
             catch (Exception ex)
             {
                 sw.Stop();
-                OmsMeter.ToolCallCount.Add(1, new ("tool", "get_order"), new ("status", "error"));
+                OmsMeter.ToolCallCount.Add(1, new("tool", "get_order"), new("status", "error"));
                 activity?.AddException(ex);
                 activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 throw;
@@ -99,7 +107,8 @@ namespace OrderManagement.McpServer.Tools
            [Description("Number of items per page. Default is 10, maximum is 100.")]
             int pageSize = 10,
            [Description("Optional order status filter. Valid values: Draft, Placed, Confirmed, Shipped, Delivered, Cancelled. Leave empty to get all statuses.")]
-            string? status = null)
+            string? status = null,
+           CancellationToken cancellationToken = default)
         {
             // Validate pagination parameters
             if (page < 1)
@@ -108,6 +117,19 @@ namespace OrderManagement.McpServer.Tools
                 pageSize = 10;
             if (pageSize > 100)
                 pageSize = 100;
+
+            // Tạo cache key duy nhất từ tổ hợp filter
+            var cacheKey = $"orders:list:{status ?? "all"}:page{page}";
+
+
+            // Bước 1: Thử đọc từ cache
+            var cached = await _cacheService.GetAsync<PagedResult<OrderSummaryDto>>(cacheKey, cancellationToken);
+            if (cached is not null)
+            {
+                _logger.LogInformation("Cache HIT cho key: {Key}", cacheKey);
+                return cached;
+            }
+
 
             // Parse status if provided
             OrderStatus? orderStatus = null;
@@ -186,7 +208,7 @@ namespace OrderManagement.McpServer.Tools
                     ProductId = Guid.Parse(i.ProductId),
                     Quantity = i.Quantity,
                     UnitPrice = i.UnitPrice,
-                    Currency= i.Currency
+                    Currency = i.Currency
                 }).ToList()
             };
 
@@ -199,6 +221,13 @@ namespace OrderManagement.McpServer.Tools
                     return "Error: Order must contain at least one item.";
                 return "Failed to create order: " + result.Error.Description;
             }
+
+            // Xóa toàn bộ cache orders sau khi tạo mới
+            // RemoveByPrefix xóa tất cả key bắt đầu bằng 'orders:list:'
+            await _cacheService.RemoveByPrefixAsync("orders:list:", cancellationToken);
+            _logger.LogInformation("Cache invalidated sau khi tạo order {OrderId}", result.Value);
+
+
             return $"Order created successfully. Order ID: {result.Value}";
 
             // Không catch generic Exception ở đây — để middleware xử lý
@@ -237,7 +266,8 @@ namespace OrderManagement.McpServer.Tools
             "Returns revenue grouped by currency, excluding cancelled orders.")]
         public async Task<string> GetRevenueStatistics(
             [Description("Month number from 1 to 12.")] int month,
-            [Description("Four-digit year, for example 2026.")] int year)
+            [Description("Four-digit year, for example 2026.")] int year,
+            CancellationToken cancellationToken)
         {
             await AuthorizeOrThrow("CanViewRevenue");
 
@@ -247,11 +277,39 @@ namespace OrderManagement.McpServer.Tools
             if (year < 2000 || year > 3000)
                 return "Error: Year must be between 2000 and 3000.";
 
-            var result = await _mediator.Send(new GetRevenueQuery(month, year));
-            if (result.IsFailure)
-                return $"Failed to get revenue statistics: {result.Error.Description}";
+            // Tạo timeout riêng: 10 giây cho analytics query
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            return JsonSerializer.Serialize(result);
+
+            // Linked: cancel khi một trong hai trigger — client disconnect hoặc timeout
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutCts.Token);
+
+            try
+            {
+                var result = await _mediator.Send(new GetRevenueQuery(month, year), linkedCts.Token);
+                if (result.IsFailure)
+                    return $"Failed to get revenue statistics: {result.Error.Description}";
+
+                return JsonSerializer.Serialize(result);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            {
+                // Timeout của chúng ta trigger — trả error rõ ràng
+                return JsonSerializer.Serialize(new
+                {
+                    error = "timeout",
+                    message = $"Query thống kê tháng {month} mất quá 10 giây. Thử lại với range ngắn hơn.",
+                    suggestion = "Thử query từng tuần thay vì cả tháng: from_date + to_date"
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Client disconnect — không cần log error
+                return JsonSerializer.Serialize(new { error = "cancelled", message = "Request bị hủy" });
+            }
+
         }
 
         private async Task AuthorizeOrThrow(string policyName)
