@@ -9,6 +9,7 @@ using OpenIddict.Server.AspNetCore;
 using OrderManagement.AuthServer.Data;
 using System.Net;
 using System.Security.Claims;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -77,8 +78,7 @@ builder.Services.AddOpenIddict()
         options.RegisterScopes(Scopes.Email, Scopes.Profile, Scopes.Roles, "mcp_api");
         options.DisableAccessTokenEncryption();
 
-        options.AddDevelopmentEncryptionCertificate()
-            .AddDevelopmentSigningCertificate();
+        ConfigureOpenIddictCertificates(options, builder.Configuration, builder.Environment);
 
         var aspNetCoreBuilder = options.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough()
@@ -581,6 +581,48 @@ static async Task SeedAsync(IServiceProvider services, IConfiguration configurat
 
         await applicationManager.CreateAsync(descriptor);
     }
+}
+
+static void ConfigureOpenIddictCertificates(
+    Microsoft.Extensions.DependencyInjection.OpenIddictServerBuilder options,
+    IConfiguration configuration,
+    IWebHostEnvironment environment)
+{
+    if (environment.IsDevelopment())
+    {
+        options.AddDevelopmentEncryptionCertificate()
+            .AddDevelopmentSigningCertificate();
+        return;
+    }
+
+    var certificatePath = configuration["OpenIddict:Certificates:Path"];
+    var certificatePassword = configuration["OpenIddict:Certificates:Password"];
+
+    if (!string.IsNullOrWhiteSpace(certificatePath))
+    {
+        var resolvedPath = Path.IsPathRooted(certificatePath)
+            ? certificatePath
+            : Path.Combine(environment.ContentRootPath, certificatePath);
+
+        if (!File.Exists(resolvedPath))
+        {
+            throw new InvalidOperationException(
+                $"OpenIddict certificate file was not found at '{resolvedPath}'. Configure OpenIddict:Certificates:Path correctly.");
+        }
+
+        var certificate = new X509Certificate2(
+            resolvedPath,
+            certificatePassword,
+            X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet);
+
+        options.AddEncryptionCertificate(certificate)
+            .AddSigningCertificate(certificate);
+
+        return;
+    }
+
+    options.AddEphemeralEncryptionKey()
+        .AddEphemeralSigningKey();
 }
 
 static SeedOptions GetSeedOptions(IConfiguration configuration)

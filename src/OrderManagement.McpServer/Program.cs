@@ -35,6 +35,8 @@ Log.Logger = new LoggerConfiguration()
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog();
 
+builder.Configuration["Database:UseInMemory"] = "true";
+
 
 // ✅ User Secrets tự động được load trong Development environment
 // Configuration priority (cao → thấp):
@@ -260,7 +262,6 @@ app.MapMethods("/token", new[] { "OPTIONS", "POST" }, async (HttpContext httpCon
 }).RequireCors(InspectorCorsPolicy);
 
 app.MapMcp("/mcp")
-    .RequireRateLimiting("mcp")
     .RequireAuthorization(); // MCP server sẽ lắng nghe tại endpoint /mcp
 
 await app.RunAsync();

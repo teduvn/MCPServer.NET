@@ -49,20 +49,29 @@ namespace OrderManagement.Infrastructure
             IConfiguration configuration,
             IHostEnvironment env)
         {
+            var useInMemoryDatabase = configuration.GetValue<bool>("Database:UseInMemory");
+
             // Đăng ký DbContext
             services.AddDbContext<ApplicationDbContext>(options =>
             {
-                options.UseSqlServer(
-                    configuration.GetConnectionString("DefaultConnection"),
-                    sqlOptions =>
-                    {
-                        sqlOptions.MigrationsAssembly(
-                            typeof(ApplicationDbContext).Assembly.FullName);
-                        sqlOptions.EnableRetryOnFailure(   // built-in retry cho transient error
-                            maxRetryCount: 3,
-                            maxRetryDelay: TimeSpan.FromSeconds(5),
-                            errorNumbersToAdd: null);
-                    });
+                if (useInMemoryDatabase)
+                {
+                    options.UseInMemoryDatabase("OrderManagementMcpServerDb");
+                }
+                else
+                {
+                    options.UseSqlServer(
+                        configuration.GetConnectionString("DefaultConnection"),
+                        sqlOptions =>
+                        {
+                            sqlOptions.MigrationsAssembly(
+                                typeof(ApplicationDbContext).Assembly.FullName);
+                            sqlOptions.EnableRetryOnFailure(   // built-in retry cho transient error
+                                maxRetryCount: 3,
+                                maxRetryDelay: TimeSpan.FromSeconds(5),
+                                errorNumbersToAdd: null);
+                        });
+                }
 
                 // Enable sensitive data logging in development
                 if (env.IsDevelopment())
@@ -86,7 +95,7 @@ namespace OrderManagement.Infrastructure
             services.AddScoped<IApplicationDbContext>(
                 sp => sp.GetRequiredService<ApplicationDbContext>());
 
-            // Register IDbConnectionFactory
+            // Register IDbConnectionFactory for query handlers using Dapper.
             services.AddScoped<IDbConnectionFactory, SqlConnectionFactory>();
 
             // Đăng ký seeders
@@ -94,11 +103,8 @@ namespace OrderManagement.Infrastructure
             services.AddScoped<IDataSeeder, AdminUserSeeder>();
 
             // Development seeder chỉ đăng ký khi chạy dev environment
-            if (env.IsDevelopment())
-            {
-                services.AddScoped<IDataSeeder, DevelopmentCustomerSeeder>();
-                services.AddScoped<IDataSeeder, DevelopmentOrderSeeder>();
-            }
+            services.AddScoped<IDataSeeder, DevelopmentCustomerSeeder>();
+            services.AddScoped<IDataSeeder, DevelopmentOrderSeeder>();
 
 
 
