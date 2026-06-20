@@ -41,6 +41,7 @@ namespace OrderManagement.Application.Orders.Queries
                         o.Id,
                         CAST(o.Id AS NVARCHAR(36)) AS OrderNumber,
                         o.CreatedAt AS OrderDate,
+                        o.CustomerId,
                         o.CustomerEmail AS CustomerName,
                         o.TotalAmount,
                         o.Currency,

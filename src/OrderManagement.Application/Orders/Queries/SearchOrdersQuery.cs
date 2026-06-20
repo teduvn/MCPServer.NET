@@ -37,6 +37,7 @@ namespace OrderManagement.Application.Orders.Queries
                 Id = o.Id,
                 OrderNumber = o.Id.ToString(),
                 OrderDate = o.CreatedAt,
+                CustomerId = o.CustomerId,
                 CustomerName = o.CustomerEmail,
                 TotalAmount = o.TotalAmount.Amount,
                 Currency = o.TotalAmount.Currency,

@@ -43,7 +43,7 @@ namespace OrderManagement.McpServer.Tools
             "Retrieve a single order by its unique identifier. " +
             "Returns order details including status, customer info, line items, and total. " +
             "Use this when you need full details of a specific order. " +
-            "For searching multiple orders, use list_orders or search_orders instead.")]
+            "For searching multiple orders, use list_orders or search_orders_by_customer instead.")]
         public async Task<OrderDto?> GetOrder(
             [Description(
                 "The order ID in GUID format (e.g. '3fa85f64-5717-4562-b3fc-2c963f66afa6'). " +
@@ -207,9 +207,10 @@ namespace OrderManagement.McpServer.Tools
 
         [McpServerTool(Name = "cancel_order")]
         [RequiresRole("Manager")]
+        [RequiresClaim("permission", Permissions.Orders.Cancel)]
         [Description(
             "Cancel an existing order by its GUID. " +
-            "Only Manager role can perform this action. " +
+            "Requires the permission claim Permissions.Orders.Cancel. " +
             "Orders already shipped, delivered, or cancelled cannot be cancelled.")]
         public async Task<string> CancelOrder(
             [Description("The order ID in GUID format.")]
